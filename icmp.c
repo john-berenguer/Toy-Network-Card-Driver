@@ -1,40 +1,3 @@
-#include "icmp.h"
-#include "ip.h"
-#include "interface.h"
-
-#include <string.h>
-#include <arpa/inet.h>
-
-#define ICMP_ECHO_REQUEST 8
-#define ICMP_ECHO_REPLY   0
-
-struct icmp_header {
-    uint8_t  type;
-    uint8_t  code;
-    uint16_t checksum;
-    uint16_t id;
-    uint16_t sequence;
-} __attribute__((packed));
-
-static uint16_t icmp_checksum(const void *data, size_t len)
-{
-    const uint16_t *buf = data;
-    uint32_t sum = 0;
-
-    while (len > 1) {
-        sum += *buf++;
-        len -= 2;
-    }
-
-    if (len)
-        sum += *(uint8_t *)buf;
-
-    while (sum >> 16)
-        sum = (sum & 0xFFFF) + (sum >> 16);
-
-    return (uint16_t)(~sum);
-}
-
 void icmp_handle(const struct ip_header *ip,
                  const uint8_t *payload,
                  size_t len)
@@ -42,27 +5,29 @@ void icmp_handle(const struct ip_header *ip,
     if (len < sizeof(struct icmp_header))
         return;
 
-    struct icmp_header *icmp = (struct icmp_header *)payload;
+    const struct icmp_header *icmp =
+        (const struct icmp_header *)payload;
 
     if (icmp->type != ICMP_ECHO_REQUEST)
         return;
 
-    uint8_t buffer[1500];
+    uint8_t packet[1500];
 
-    /* Construir ICMP reply */
+    struct ip_header *ip_reply =
+        (struct ip_header *)packet;
+
+    uint8_t *icmp_reply =
+        packet + sizeof(struct ip_header);
+
+    memcpy(icmp_reply, payload, len);
+
     struct icmp_header *reply =
-        (struct icmp_header *)buffer;
-
-    memcpy(buffer, payload, len);
+        (struct icmp_header *)icmp_reply;
 
     reply->type = ICMP_ECHO_REPLY;
     reply->code = 0;
     reply->checksum = 0;
-    reply->checksum = icmp_checksum(buffer, len);
-
-    /* Construir IP */
-    struct ip_header *ip_reply =
-        (struct ip_header *)(buffer - sizeof(struct ip_header));
+    reply->checksum = icmp_checksum(icmp_reply, len);
 
     ip_reply->ver_ihl = 0x45;
     ip_reply->tos = 0;
@@ -78,9 +43,10 @@ void icmp_handle(const struct ip_header *ip,
     ip_reply->checksum =
         ip_checksum(ip_reply, sizeof(struct ip_header));
 
-    /* Enviar */
-    send_ip_packet(
-        ip_reply,
+    interface_send(packet,
+                   sizeof(struct ip_header) + len);
+}
+
         buffer,
         len
     );
