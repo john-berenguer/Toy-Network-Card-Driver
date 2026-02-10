@@ -5,7 +5,28 @@
 #include <stdio.h>
 
 #include "interface.h"
+#include "arp.h"
+#include "ip.h"
+
+#include <string.h>
+#include <arpa/inet.h>
+
 #include "hal.h"
+
+#define ETH_TYPE_IP 0x0800
+#define ETH_ADDR_LEN 6
+
+struct eth_header {
+    uint8_t  dst[ETH_ADDR_LEN];
+    uint8_t  src[ETH_ADDR_LEN];
+    uint16_t type;
+} __attribute__((packed));
+
+extern uint8_t local_mac[6];
+extern uint32_t local_ip;
+extern nic_device_t *nic_device;
+
+
 
 typedef unsigned char flags_t;
 typedef enum {
